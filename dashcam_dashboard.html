@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TrafficLens AI — Live Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#09090f;--sur:#111118;--sur2:#16161f;--bdr:#22223a;
+  --acc:#f0a500;--acc2:#e05c1a;--dan:#e03040;--grn:#00c87a;--blu:#3b82f6;
+  --mut:#6b6b8a;--txt:#e8e8f2;--txt2:#a8a8c4;
+  --mono:'IBM Plex Mono',monospace;--head:'Rajdhani',sans-serif;--body:'Inter',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:var(--body);font-size:13px;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 4px);pointer-events:none;z-index:9999}
+
+header{position:sticky;top:0;z-index:100;background:rgba(9,9,15,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--bdr);height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;gap:16px}
+.logo{font-family:var(--head);font-size:21px;font-weight:700;letter-spacing:2px;display:flex;align-items:center;gap:9px}
+.logo span{color:var(--acc)}
+.live-dot{width:9px;height:9px;border-radius:50%;background:var(--mut);flex-shrink:0}
+.live-dot.processing{background:var(--grn);box-shadow:0 0 8px var(--grn);animation:blink 1.2s infinite}
+.live-dot.done{background:var(--blu);box-shadow:0 0 8px var(--blu)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.s-label{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;border:1px solid var(--bdr);color:var(--mut)}
+.s-processing{border-color:rgba(0,200,122,.3)!important;color:var(--grn)!important;background:rgba(0,200,122,.08)!important}
+.s-done{border-color:rgba(59,130,246,.3)!important;color:var(--blu)!important;background:rgba(59,130,246,.08)!important}
+.hdr-meta{font-family:var(--mono);font-size:11px;color:var(--mut);display:flex;gap:18px;margin-left:auto}
+.hdr-meta b{color:var(--acc)}
+
+.prog-wrap{height:3px;background:var(--bdr)}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));width:0%;transition:width .8s ease}
+
+.wrap{max-width:1440px;margin:0 auto;padding:18px 18px 40px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+
+.waiting{position:fixed;inset:0;background:rgba(9,9,15,.93);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.waiting.hidden{display:none}
+.w-spinner{width:48px;height:48px;border:3px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.w-title{font-family:var(--head);font-size:22px;letter-spacing:3px;color:var(--txt)}
+.w-sub{font-family:var(--mono);font-size:11px;color:var(--mut);text-align:center;max-width:400px;line-height:1.9}
+
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;position:relative}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--acc),transparent);pointer-events:none}
+.ch{padding:12px 16px 10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.ct{font-family:var(--head);font-size:12px;font-weight:600;letter-spacing:2px;color:var(--txt2);text-transform:uppercase}
+.cb{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:rgba(240,165,0,.1);color:var(--acc);border:1px solid rgba(240,165,0,.18)}
+.cd{padding:14px 16px}
+
+.kpi-row{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.kpi{background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
+.kpi:hover{border-color:var(--acc);transform:translateY(-2px)}
+.kpi::after{content:'';position:absolute;bottom:0;left:0;width:100%;height:3px;background:var(--kc,var(--acc));opacity:.6}
+.kpi-icon{font-size:20px;margin-bottom:8px;display:block}
+.kpi-val{font-family:var(--head);font-size:36px;font-weight:700;color:var(--kc,var(--acc));line-height:1;margin-bottom:3px}
+.kpi-lbl{font-size:10px;font-weight:500;color:var(--mut);text-transform:uppercase;letter-spacing:1px}
+.kpi-sub{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:5px}
+
+@keyframes numFlash{0%{transform:scale(1.2);opacity:.6}100%{transform:scale(1);opacity:1}}
+.flash{animation:numFlash .35s ease}
+
+.vt{width:100%;border-collapse:collapse}
+.vt tr{border-bottom:1px solid var(--bdr)}
+.vt tr:last-child{border-bottom:none}
+.vt td{padding:7px 3px;vertical-align:middle}
+.vn{font-size:11px;color:var(--txt);white-space:nowrap;padding-right:10px}
+.vbw{height:5px;background:var(--bdr);border-radius:3px;overflow:hidden;min-width:60px}
+.vb{height:100%;border-radius:3px;transition:width .7s ease}
+.vc{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--acc);text-align:right;padding-left:10px;min-width:28px;transition:color .3s}
+.vp{font-family:var(--mono);font-size:10px;color:var(--mut);text-align:right;padding-left:6px;min-width:34px}
+
+.jg{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.ji{background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;padding:9px 11px;display:flex;align-items:center;gap:9px}
+.ji-icon{font-family:var(--head);font-size:18px;font-weight:700;color:var(--blu);min-width:22px;text-align:center}
+.ji-n{font-size:10px;color:var(--txt2);line-height:1.3}
+.ji-c{font-family:var(--head);font-size:22px;font-weight:700;color:var(--blu);line-height:1;transition:color .3s}
+
+/* ── TIMELINE FIX: give markers container enough height + relative position ── */
+.tl-wrap{grid-column:1/-1;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:14px 16px}
+.tl-bar{height:6px;background:var(--bdr);border-radius:3px;position:relative;margin:10px 0 0;cursor:pointer}
+.tl-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:3px;transition:width .8s ease}
+/* markers sit INSIDE .tl-bar so they're positioned relative to it */
+.tl-markers{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
+.tl-marker{position:absolute;top:-4px;width:3px;height:14px;border-radius:1px;transform:translateX(-50%);cursor:pointer;pointer-events:all;transition:height .15s,top .15s}
+.tl-marker:hover{height:18px;top:-6px}
+.tl-marker.violation{background:var(--dan)}
+.tl-marker.junction{background:var(--blu)}
+/* tooltip on hover */
+.tl-marker::after{content:attr(title);position:absolute;bottom:22px;left:50%;transform:translateX(-50%);background:var(--sur2);border:1px solid var(--bdr);color:var(--txt2);font-family:var(--mono);font-size:9px;padding:3px 6px;border-radius:3px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
+.tl-marker:hover::after{opacity:1}
+
+.log-outer{grid-column:1/-1}
+.log-scroll{max-height:380px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--bdr) transparent}
+.log-scroll::-webkit-scrollbar{width:3px}
+.log-scroll::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
+.lt{width:100%;border-collapse:collapse}
+.lt thead tr{border-bottom:2px solid var(--bdr);position:sticky;top:0;background:var(--sur);z-index:2}
+.lt th{font-family:var(--mono);font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;padding:7px 9px;text-align:left;white-space:nowrap}
+.lt tbody tr{border-bottom:1px solid rgba(34,34,58,.5);cursor:pointer}
+.lt tbody tr:hover td{background:rgba(240,165,0,.04)}
+.lt td{padding:6px 9px;vertical-align:middle;transition:background .1s}
+.ts-c{font-family:var(--mono);font-size:12px;color:var(--acc);white-space:nowrap}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 7px;border-radius:3px;font-weight:500;white-space:nowrap}
+.badge.violation{background:rgba(224,48,64,.1);color:#f06070;border:1px solid rgba(224,48,64,.18)}
+.badge.junction{background:rgba(59,130,246,.1);color:#7aacfc;border:1px solid rgba(59,130,246,.18)}
+.sk{font-size:13px;opacity:.3}
+.lt tbody tr:hover .sk{opacity:1;color:var(--acc)}
+
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.fb{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid var(--bdr);background:transparent;color:var(--mut);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.8px}
+.fb.active,.fb:hover{border-color:var(--acc);color:var(--acc);background:rgba(240,165,0,.06)}
+
+.pause-note{font-family:var(--mono);font-size:10px;color:var(--mut);margin-left:auto;display:flex;align-items:center;gap:6px}
+.pause-dot{width:7px;height:7px;border-radius:50%;background:var(--acc);animation:blink 1.5s infinite}
+
+#toast{position:fixed;bottom:22px;right:22px;background:var(--sur2);border:1px solid var(--acc);color:var(--txt);font-family:var(--mono);font-size:12px;padding:9px 15px;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.5);opacity:0;transform:translateY(16px);transition:all .25s;pointer-events:none;z-index:9999}
+#toast.show{opacity:1;transform:translateY(0)}
+
+@media(max-width:1024px){.wrap{grid-template-columns:1fr 1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.wrap{grid-template-columns:1fr}.kpi-row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="waiting" id="waiting">
+  <div class="w-spinner"></div>
+  <div class="w-title">WAITING FOR PIPELINE</div>
+  <div class="w-sub">
+    Run <b style="color:var(--acc)">python3 pipeline.py --video dashcam.mp4</b> in your terminal,<br>
+    then keep this tab open — data updates every 2 s without reloading.
+  </div>
+</div>
+
+<header>
+  <div class="logo"><div class="live-dot" id="live-dot"></div>TRAFFIC<span>LENS</span>&nbsp;AI</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span class="s-label" id="status-label">WAITING</span>
+  </div>
+  <div class="hdr-meta">
+    <div>TIME <b id="hdr-ts">—</b></div>
+    <div>PROGRESS <b id="hdr-pct">0%</b></div>
+    <div>MODEL <b>YOLOv8x + DeepSORT</b></div>
+  </div>
+</header>
+<div class="prog-wrap"><div class="prog-bar" id="prog-bar"></div></div>
+
+<div class="wrap">
+
+  <div class="kpi-row">
+    <div class="kpi" style="--kc:var(--dan)"><span class="kpi-icon">🚨</span><div class="kpi-val" id="kv">0</div><div class="kpi-lbl">Total Violations</div><div class="kpi-sub" id="kv-sub">detecting…</div></div>
+    <div class="kpi" style="--kc:var(--blu)"><span class="kpi-icon">🔀</span><div class="kpi-val" id="kj">0</div><div class="kpi-lbl">Junctions</div><div class="kpi-sub" id="kj-sub">detecting…</div></div>
+    <div class="kpi" style="--kc:var(--grn)"><span class="kpi-icon">🚗</span><div class="kpi-val" id="kvh">0</div><div class="kpi-lbl">Unique Vehicles</div><div class="kpi-sub">de-duplicated via DeepSORT</div></div>
+    <div class="kpi" style="--kc:var(--acc)"><span class="kpi-icon">📹</span><div class="kpi-val" id="know">0</div><div class="kpi-lbl">Vehicles in Frame</div><div class="kpi-sub" id="kdur">—</div></div>
+    <div class="kpi" style="--kc:#c084fc"><span class="kpi-icon">⚡</span><div class="kpi-val" id="kprog">0%</div><div class="kpi-lbl">Progress</div><div class="kpi-sub">frames analysed</div></div>
+  </div>
+
+  <!-- Timeline — markers now rendered INSIDE .tl-bar for correct positioning -->
+  <div class="tl-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-family:var(--head);font-size:12px;letter-spacing:2px;color:var(--txt2);text-transform:uppercase">VIDEO TIMELINE</span>
+      <span class="cb" id="tl-badge">LIVE</span>
+    </div>
+    <div class="tl-bar" id="tl-bar">
+      <div class="tl-fill" id="tl-fill"></div>
+      <!-- FIX: markers are children of tl-bar, positioned absolutely within it -->
+      <div class="tl-markers" id="tl-markers"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px">
+      <span style="font-family:var(--mono);font-size:10px;color:var(--mut)">0:00:00</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--mut);display:flex;gap:14px">
+        <span style="color:var(--dan)">● Violation</span><span style="color:var(--blu)">● Junction</span>
+      </span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--mut)" id="tl-end">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">VIOLATIONS</div><div class="cb" id="v-badge">0 TOTAL</div></div>
+    <div class="cd">
+      <table class="vt"><tbody id="viol-rows"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">VIOLATION SPLIT</div><div class="cb">CHART</div></div>
+    <div class="cd"><canvas id="violChart" height="220"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">VEHICLE CATEGORIES</div><div class="cb" id="vh-badge">0 TOTAL</div></div>
+    <div class="cd"><canvas id="vehChart" height="220"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">JUNCTION TYPES</div><div class="cb" id="j-badge">0 TOTAL</div></div>
+    <div class="cd"><div class="jg" id="j-grid"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">JUNCTION SPLIT</div><div class="cb">CHART</div></div>
+    <div class="cd"><canvas id="jChart" height="220"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct">VEHICLE DENSITY</div><div class="cb">LIVE</div></div>
+    <div class="cd"><canvas id="densChart" height="220"></canvas></div>
+  </div>
+
+  <div class="card log-outer">
+    <div class="ch">
+      <div class="ct">LIVE EVENT LOG</div>
+      <div class="cb" id="log-badge">0 EVENTS</div>
+      <div class="pause-note" id="pause-note" style="display:none">
+        <div class="pause-dot"></div> scroll to pause
+      </div>
+    </div>
+    <div class="cd" style="padding-bottom:8px">
+      <div class="filter-row" id="filter-row"></div>
+      <div class="log-scroll" id="log-scroll">
+        <table class="lt">
+          <thead><tr>
+            <th>#</th><th>Timestamp</th><th>Type</th><th>Detail</th><th>Conf</th><th></th>
+          </tr></thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast">⏩ <span id="toast-msg"></span></div>
+
+<script>
+const VIOL_KEYS   = ['helmetless','wrong_side','signal_jump','phone_use','triple_ride'];
+const VIOL_LABELS = {helmetless:'Helmet-less Riding',wrong_side:'Wrong-side Driving',signal_jump:'Signal Jumping',phone_use:'Phone Use',triple_ride:'Triple Riding'};
+const VIOL_ICONS  = {helmetless:'🪖',wrong_side:'↩️',signal_jump:'🚦',phone_use:'📱',triple_ride:'👥'};
+const VIOL_COLORS = ['#e03040','#f0a500','#e05c1a','#c084fc','#3b82f6'];
+const J_ICONS     = {'T-Junction':'⊤','4-Way / X-Junction':'✚','Y-Junction':'Ψ','Roundabout / Traffic Circle':'⊙','Flyover / Underpass Entry-Exit':'⇌'};
+const J_COLORS    = ['#3b82f6','#6366f1','#8b5cf6','#06b6d4','#0ea5e9'];
+const VEH_KEYS    = ['two_wheeler','lmv','hmv','others'];
+const VEH_LABELS  = ['2W','LMV','HMV','Others'];
+const VEH_COLORS  = ['#f0a500','#3b82f6','#e03040','#00c87a'];
+
+let charts = {};
+let initialized = false;
+let logFilter = 'all';
+let knownEvents = new Map();
+let knownMarkers = new Set();
+let jKnownTypes = new Set();
+let toastTimer;
+let userScrolled = false;
+
+// FIX 1: totalFrames starts at 0, set from data before markers are drawn
+let totalFrames = 0;
+
+const logScroll = document.getElementById('log-scroll');
+logScroll.addEventListener('scroll', () => {
+  const atBottom = logScroll.scrollHeight - logScroll.scrollTop - logScroll.clientHeight < 40;
+  userScrolled = !atBottom;
+  document.getElementById('pause-note').style.display = userScrolled ? 'flex' : 'none';
+});
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== String(val)) el.textContent = val;
+}
+
+function setNum(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = String(val);
+  if (el.textContent !== v) {
+    el.textContent = v;
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+  }
+}
+
+function seek(ts) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = 'Jumped to ' + ts;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function initCharts() {
+  Chart.defaults.color       = '#a8a8c4';
+  Chart.defaults.borderColor = '#22223a';
+  Chart.defaults.font.family = "'Inter',sans-serif";
+
+  charts.viol = new Chart(document.getElementById('violChart'), {
+    type: 'doughnut',
+    data: { labels: VIOL_KEYS.map(k => VIOL_LABELS[k]),
+            datasets: [{ data: [0,0,0,0,0], backgroundColor: VIOL_COLORS, borderWidth:2, borderColor:'#09090f', hoverOffset:5 }] },
+    options: { animation:false, cutout:'62%', plugins:{ legend:{ position:'right', labels:{ color:'#a8a8c4', font:{size:10}, boxWidth:11 } } } }
+  });
+
+  charts.veh = new Chart(document.getElementById('vehChart'), {
+    type: 'bar',
+    data: { labels: VEH_LABELS, datasets: [{ data:[0,0,0,0], backgroundColor: VEH_COLORS, borderRadius:4, borderWidth:0 }] },
+    options: { animation:false, indexAxis:'y', plugins:{ legend:{display:false} },
+               scales:{ x:{grid:{color:'#22223a'},ticks:{color:'#6b6b8a'}}, y:{grid:{display:false},ticks:{color:'#a8a8c4'}} } }
+  });
+
+  charts.junc = new Chart(document.getElementById('jChart'), {
+    type: 'pie',
+    data: { labels:[], datasets:[{ data:[], backgroundColor: J_COLORS, borderWidth:2, borderColor:'#09090f' }] },
+    options: { animation:false, plugins:{ legend:{ position:'right', labels:{ color:'#a8a8c4', font:{size:10}, boxWidth:11 } } } }
+  });
+
+  charts.dens = new Chart(document.getElementById('densChart'), {
+    type: 'line',
+    data: { labels:[], datasets:[{ label:'Vehicles', data:[], borderColor:'#f0a500', backgroundColor:'rgba(240,165,0,.08)', borderWidth:1.5, fill:true, tension:0.4, pointRadius:0, pointHoverRadius:4 }] },
+    options: { animation:false, plugins:{legend:{display:false}},
+               scales:{ x:{grid:{color:'#22223a'},ticks:{color:'#6b6b8a',maxRotation:0,maxTicksLimit:8}}, y:{grid:{color:'#22223a'},ticks:{color:'#6b6b8a'},beginAtZero:true} } }
+  });
+
+  const tbody = document.getElementById('viol-rows');
+  VIOL_KEYS.forEach((k, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="vn">${VIOL_ICONS[k]} ${VIOL_LABELS[k]}</td>
+      <td style="width:100px"><div class="vbw"><div class="vb" id="vbar-${k}" style="background:${VIOL_COLORS[i]};width:0%"></div></div></td>
+      <td class="vc" id="vcnt-${k}">0</td>
+      <td class="vp" id="vpct-${k}">0%</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const fr = document.getElementById('filter-row');
+  ['all','violation','junction',...VIOL_KEYS].forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'fb' + (f==='all'?' active':'');
+    btn.textContent = f.replace(/_/g,' ').toUpperCase();
+    btn.onclick = () => setFilter(f, btn);
+    fr.appendChild(btn);
+  });
+}
+
+function updateKPIs(d) {
+  const pct = d.progress_pct || 0;
+
+  // FIX 2: set totalFrames immediately so markers can use it
+  if (d.total_frames > 0) totalFrames = d.total_frames;
+
+  const isDone = d.status === 'done';
+  const dot    = document.getElementById('live-dot');
+  const sl     = document.getElementById('status-label');
+  dot.className = 'live-dot ' + (isDone ? 'done' : 'processing');
+  sl.className  = 's-label ' + (isDone ? 's-done' : 's-processing');
+  if (sl.textContent !== (isDone?'DONE ✓':'LIVE')) sl.textContent = isDone?'DONE ✓':'LIVE';
+  setText('hdr-ts',  d.current_ts || '—');
+  setText('hdr-pct', pct.toFixed(1)+'%');
+  document.getElementById('prog-bar').style.width = pct + '%';
+
+  setNum('kv',   d.total_violations || 0);
+  setNum('kj',   d.junctions || 0);
+  setNum('kvh',  d.vehicles_unique || 0);
+  setNum('know', d.current_vehicle_count || 0);
+  setText('kprog', pct.toFixed(0)+'%');
+  setText('kdur',  d.duration || '—');
+  setText('kv-sub', (d.total_violations > 0 ? d.total_violations+' detected so far' : 'detecting…'));
+  setText('kj-sub', (d.junctions > 0 ? d.junctions+' crossings found' : 'detecting…'));
+  setText('tl-end', d.duration || '—');
+  document.getElementById('tl-fill').style.width = pct + '%';
+
+  if (isDone) {
+    clearInterval(pollTimer);
+    setText('tl-badge','COMPLETE ✓');
+  }
+}
+
+function updateViolations(vc, tv) {
+  setText('v-badge', tv + ' TOTAL');
+  const maxV = Math.max(...VIOL_KEYS.map(k => vc[k]||0), 1);
+  VIOL_KEYS.forEach(k => {
+    const cnt  = vc[k] || 0;
+    const bpct = Math.round(cnt / maxV * 100);
+    const ppct = tv ? Math.round(cnt / tv * 100) : 0;
+    const bar  = document.getElementById('vbar-'+k);
+    const cntEl= document.getElementById('vcnt-'+k);
+    const pctEl= document.getElementById('vpct-'+k);
+    if (bar  && bar.style.width  !== bpct+'%') bar.style.width = bpct+'%';
+    if (cntEl && cntEl.textContent !== String(cnt)) { cntEl.textContent = cnt; cntEl.classList.remove('flash'); void cntEl.offsetWidth; cntEl.classList.add('flash'); }
+    if (pctEl && pctEl.textContent !== ppct+'%') pctEl.textContent = ppct+'%';
+  });
+  if (charts.viol) {
+    charts.viol.data.datasets[0].data = VIOL_KEYS.map(k => vc[k]||0);
+    charts.viol.update('none');
+  }
+}
+
+function updateVehicles(vcat, total) {
+  setText('vh-badge', total + ' TOTAL');
+  if (charts.veh) {
+    charts.veh.data.datasets[0].data = VEH_KEYS.map(k => vcat[k]||0);
+    charts.veh.update('none');
+  }
+}
+
+function updateJunctions(jb, total) {
+  setText('j-badge', total + ' TOTAL');
+  const grid = document.getElementById('j-grid');
+  Object.entries(jb).forEach(([name, cnt]) => {
+    if (!jKnownTypes.has(name)) {
+      jKnownTypes.add(name);
+      const div = document.createElement('div');
+      div.className = 'ji';
+      div.id = 'ji-'+name.replace(/\W/g,'_');
+      div.innerHTML = `<div class="ji-icon">${J_ICONS[name]||'◆'}</div><div><div class="ji-c" id="jic-${name.replace(/\W/g,'_')}">0</div><div class="ji-n">${name}</div></div>`;
+      grid.appendChild(div);
+    }
+    const cEl = document.getElementById('jic-'+name.replace(/\W/g,'_'));
+    if (cEl && cEl.textContent !== String(cnt)) { cEl.textContent = cnt; cEl.classList.remove('flash'); void cEl.offsetWidth; cEl.classList.add('flash'); }
+  });
+  if (charts.junc) {
+    charts.junc.data.labels   = Object.keys(jb);
+    charts.junc.data.datasets[0].data = Object.values(jb);
+    charts.junc.update('none');
+  }
+}
+
+function updateDensity(dens) {
+  if (!charts.dens || !dens.length) return;
+  charts.dens.data.labels   = dens.map(x => x.timestamp.substring(2,7));
+  charts.dens.data.datasets[0].data = dens.map(x => x.count);
+  charts.dens.update('none');
+}
+
+// FIX 3: markers are children of #tl-bar (position:relative), so left% works correctly
+function updateMarkers(events) {
+  if (totalFrames === 0) return;   // wait until we know the video length
+  const cont = document.getElementById('tl-markers');
+  events.forEach(e => {
+    const key = e.frame + '_' + e.type + '_' + (e.subtype||'');
+    if (knownMarkers.has(key)) return;
+    knownMarkers.add(key);
+    const pct = Math.min(100, (e.frame / totalFrames) * 100);
+    const m   = document.createElement('div');
+    m.className = 'tl-marker ' + e.type;
+    m.style.left = pct + '%';
+    m.title = (e.timestamp||'') + ' — ' + (VIOL_LABELS[e.subtype] || e.subtype || '');
+    m.onclick = () => seek(e.timestamp);
+    cont.appendChild(m);
+  });
+}
+
+function updateLog(events) {
+  const tbody    = document.getElementById('log-body');
+  const atBottom = logScroll.scrollHeight - logScroll.scrollTop - logScroll.clientHeight < 40;
+  let   added    = 0;
+
+  [...events].reverse().forEach(e => {
+    const key = e.frame + '_' + (e.subtype||e.type);
+    if (knownEvents.has(key)) return;
+    const idx = knownEvents.size + 1;
+    knownEvents.set(key, true);
+    added++;
+    const tr = document.createElement('tr');
+    tr.onclick = () => seek(e.timestamp);
+    tr.innerHTML = `
+      <td style="font-family:var(--mono);font-size:10px;color:var(--mut)">${String(idx).padStart(3,'0')}</td>
+      <td class="ts-c">${e.timestamp}</td>
+      <td><span class="badge ${e.type}">${e.type==='violation'?'⚠ VIOLATION':'⊕ JUNCTION'}</span></td>
+      <td style="font-size:12px">${(VIOL_ICONS[e.subtype]||J_ICONS[e.subtype]||'◆')} ${VIOL_LABELS[e.subtype]||e.subtype||''}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--mut)">${e.confidence!=null?(e.confidence*100).toFixed(1)+'%':'—'}</td>
+      <td class="sk">▶</td>`;
+    if (logFilter !== 'all' && e.type !== logFilter && e.subtype !== logFilter) tr.style.display = 'none';
+    tbody.insertBefore(tr, tbody.firstChild);
+  });
+
+  const visibleCount = [...tbody.rows].filter(r => r.style.display !== 'none').length;
+  setText('log-badge', visibleCount + ' EVENTS');
+  if (added > 0 && !userScrolled) logScroll.scrollTop = 0;
+}
+
+function setFilter(f, btn) {
+  logFilter = f;
+  document.querySelectorAll('.fb').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const tbody = document.getElementById('log-body');
+  let visible = 0;
+  [...tbody.rows].forEach(tr => {
+    const type   = tr.querySelector('.badge')?.classList[1] || '';
+    const detail = tr.cells[3]?.textContent || '';
+    const show = f === 'all' || type === f ||
+                 Object.keys(VIOL_LABELS).some(k => f===k && detail.includes(VIOL_LABELS[k])) ||
+                 (f==='junction' && type==='junction');
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  setText('log-badge', visible + ' EVENTS');
+}
+
+function update(d) {
+  document.getElementById('waiting').classList.add('hidden');
+  updateKPIs(d);   // sets totalFrames first
+
+  const vc  = d.violation_counts   || {};
+  const tv  = d.total_violations   || 0;
+  const jb  = d.junction_breakdown || {};
+  const vc2 = d.vehicle_categories || {};
+  const tveh = Object.values(vc2).reduce((a,b)=>a+b,0);
+
+  updateViolations(vc, tv);
+  updateVehicles(vc2, tveh);
+  updateJunctions(jb, d.junctions||0);
+  updateDensity(d.density_over_time || []);
+  updateMarkers(d.recent_events || []);  // uses totalFrames set above
+  updateLog(d.recent_events || []);
+}
+
+async function poll() {
+  try {
+    const res = await fetch('live_status.json?t=' + Date.now());
+    if (!res.ok) throw new Error('not ready');
+    const data = await res.json();
+    if (!initialized) { initCharts(); initialized = true; }
+    update(data);
+  } catch(e) {
+    // pipeline not started yet
+  }
+}
+
+let pollTimer = setInterval(poll, 2000);
+poll();
+</script>
+</body>
+</html>
